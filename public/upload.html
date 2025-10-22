@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Upload avatar (static)</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#f7f7f7;color:#222}
+    .container{max-width:800px;margin:24px auto;padding:20px;background:#fff;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    input{display:block;margin:8px 0;padding:8px;width:100%;box-sizing:border-box}
+    button{padding:8px 12px}
+    img{border-radius:6px}
+    .hidden{display:none}
+    label{font-weight:600;margin-top:8px;display:block}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Upload avatar / images</h1>
+
+    <section id="loginSection">
+      <h2>Đăng nhập</h2>
+      <form id="loginForm">
+        <label for="username">Tên đăng nhập</label>
+        <input id="username" name="username" placeholder="username" required />
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" placeholder="password" type="password" required />
+        <button type="submit">Login</button>
+      </form>
+      <div id="loginResult" role="status" aria-live="polite"></div>
+    </section>
+
+    <section id="profileSection" class="hidden">
+      <h3>Thông tin người dùng</h3>
+      <img id="avatarImg" src="" alt="avatar" style="max-width:150px;display:block;margin-bottom:8px" />
+      <div id="userInfo">
+        <div><strong>Username:</strong> <span id="usernameDisplay"></span></div>
+        <div><strong>Email:</strong> <span id="emailDisplay"></span></div>
+      </div>
+      <button id="logoutBtn">Đăng xuất</button>
+    </section>
+
+    <section id="avatarSection" class="hidden">
+      <h2>Tải ảnh đại diện</h2>
+      <form id="avatarForm" enctype="multipart/form-data">
+        <label for="avatarInput">Chọn ảnh</label>
+        <input id="avatarInput" type="file" name="image" accept="image/*" required />
+        <button type="submit">Upload avatar</button>
+      </form>
+      <div id="avatarResult"></div>
+    </section>
+
+    <section id="multiSection" class="hidden">
+      <h2>Tải nhiều ảnh</h2>
+      <form id="multiForm" enctype="multipart/form-data">
+        <label for="multiInput">Chọn nhiều ảnh</label>
+        <input id="multiInput" type="file" name="image" accept="image/*" multiple required />
+        <div id="multiPreview" style="margin-top:8px"></div>
+        <button type="submit">Upload multiple</button>
+      </form>
+      <div id="multiResult"></div>
+    </section>
+
+  </div>
+
+  <script>
+  (function(){
+    const loginForm = document.getElementById('loginForm');
+    const loginResult = document.getElementById('loginResult');
+    const avatarForm = document.getElementById('avatarForm');
+    const avatarResult = document.getElementById('avatarResult');
+  const multiForm = document.getElementById('multiForm');
+  const multiSection = document.getElementById('multiSection');
+    const multiResult = document.getElementById('multiResult');
+  const avatarImg = document.getElementById('avatarImg');
+  const usernameDisplay = document.getElementById('usernameDisplay');
+  const emailDisplay = document.getElementById('emailDisplay');
+    const profileSection = document.getElementById('profileSection');
+    const avatarSection = document.getElementById('avatarSection');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    let token = null;
+
+    function setLoggedIn(t){
+      token = t;
+      if(token){
+        avatarSection.classList.remove('hidden');
+        profileSection.classList.remove('hidden');
+        multiSection.classList.remove('hidden');
+        loginResult.textContent = '';
+        fetchProfile();
+      } else {
+        avatarSection.classList.add('hidden');
+        profileSection.classList.add('hidden');
+        multiSection.classList.add('hidden');
+        avatarImg.src = '';
+        usernameDisplay.textContent = '';
+        emailDisplay.textContent = '';
+      }
+    }
+
+    loginForm.addEventListener('submit', async function(e){
+      e.preventDefault();
+      loginResult.textContent = 'Đang đăng nhập...';
+      const body = { username: loginForm.username.value, password: loginForm.password.value };
+      try{
+        const res = await fetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const data = await res.json();
+        if(data.success){
+          // server returns token in data.data
+          setLoggedIn(data.data);
+          loginResult.textContent = 'Đăng nhập thành công';
+        } else {
+          loginResult.textContent = 'Đăng nhập thất bại: ' + JSON.stringify(data.data);
+          setLoggedIn(null);
+        }
+      }catch(err){
+        loginResult.textContent = 'Lỗi khi gọi server';
+      }
+    })
+
+    logoutBtn.addEventListener('click', function(){
+      setLoggedIn(null);
+    })
+
+    async function fetchProfile(){
+      if(!token) return;
+      try{
+        const res = await fetch('/auth/me', { headers: { 'Authorization': 'Bearer '+token } });
+        const data = await res.json();
+        if(data.success){
+          const user = data.data;
+          usernameDisplay.textContent = user.username || '';
+          emailDisplay.textContent = user.email || '';
+          avatarImg.src = user.avatarURL || '';
+        } else {
+          usernameDisplay.textContent = '';
+          emailDisplay.textContent = '';
+          avatarImg.src = '';
+        }
+      }catch(e){ profileData.textContent = 'Lỗi khi lấy profile'; }
+    }
+
+    const multiPreview = document.getElementById('multiPreview');
+
+    // preview avatar upon selection
+    document.getElementById('avatarInput').addEventListener('change', function(e){
+      const f = e.target.files[0];
+      if(!f) return;
+      const url = URL.createObjectURL(f);
+      avatarImg.src = url;
+    })
+
+    avatarForm.addEventListener('submit', async function(e){
+      e.preventDefault();
+      if(!token){ alert('Bạn phải đăng nhập trước khi upload avatar'); return; }
+      const fd = new FormData();
+      const file = document.getElementById('avatarInput').files[0];
+      if(!file) return alert('Chọn file trước');
+      fd.append('image', file);
+      avatarResult.textContent = 'Đang upload...';
+      try{
+        const res = await fetch('/auth/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer '+token }, body: fd });
+        const data = await res.json();
+        if(data.success){
+          avatarResult.textContent = 'Upload thành công: ' + data.data;
+          avatarImg.src = data.data;
+          fetchProfile();
+        } else {
+          avatarResult.textContent = 'Upload thất bại: ' + JSON.stringify(data.data);
+        }
+      }catch(err){ avatarResult.textContent = 'Lỗi khi upload'; }
+    })
+
+    // preview multi selection
+    document.getElementById('multiInput').addEventListener('change', function(e){
+      multiPreview.innerHTML = '';
+      const files = e.target.files;
+      for(let i=0;i<files.length;i++){
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(files[i]);
+        img.style.maxWidth = '100px'; img.style.margin = '6px';
+        multiPreview.appendChild(img);
+      }
+    })
+
+    multiForm.addEventListener('submit', async function(e){
+      e.preventDefault();
+      if(!token){ alert('Bạn phải đăng nhập để upload nhiều ảnh'); return; }
+      const fd = new FormData();
+      const files = document.getElementById('multiInput').files;
+      if(!files || files.length===0) return alert('Chọn ít nhất 1 file');
+      for(let i=0;i<files.length;i++) fd.append('image', files[i]);
+      multiResult.textContent = 'Đang upload...';
+      try{
+        const res = await fetch('/files/uploadMulti', { method: 'POST', headers: { 'Authorization': 'Bearer '+token }, body: fd });
+        const data = await res.json();
+        if(data.success){
+          // show uploaded images + clear preview
+          multiPreview.innerHTML = '';
+          multiResult.innerHTML = '';
+          (data.data||[]).forEach(url=>{ const img=document.createElement('img'); img.src=url; img.style.maxWidth='120px'; img.style.margin='6px'; multiResult.appendChild(img); })
+        } else {
+          multiResult.textContent = 'Upload thất bại: ' + JSON.stringify(data.data);
+        }
+      }catch(err){ multiResult.textContent = 'Lỗi khi upload'; }
+    })
+
+    // on load - ensure avatar form hidden until login
+    setLoggedIn(null);
+  })();
+  </script>
+</body>
+</html>
